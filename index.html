@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Eloihi Dictionary</title>
+  <style>
+    :root {
+      --bg: #f9f9f9;
+      --accent: #0077ff;
+      --accent-light: #e0f0ff;
+      --border: #ddd;
+      --text: #333;
+      --radius: 8px;
+      --font: "Segoe UI", "Helvetica Neue", sans-serif;
+    }
+    body {
+      font-family: var(--font);
+      background-color: var(--bg);
+      color: var(--text);
+      padding: 30px;
+      max-width: 800px;
+      margin: auto;
+      line-height: 1.5;
+    }
+    h1 {
+      text-align: center;
+      color: var(--accent);
+      margin-bottom: 30px;
+    }
+    form, .search-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    input, select, button {
+      padding: 10px;
+      font-size: 1rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      outline: none;
+    }
+    input:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 5px var(--accent-light);
+    }
+    button {
+      background-color: var(--accent);
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #005fcb;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: white;
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+    }
+    thead {
+      background-color: var(--accent-light);
+    }
+    th, td {
+      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    th button {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-weight: bold;
+      cursor: pointer;
+    }
+    th button:hover {
+      text-decoration: underline;
+    }
+    td:last-child {
+      text-align: center;
+    }
+    td button {
+      background-color: crimson;
+      padding: 6px 10px;
+      font-size: 0.9rem;
+      border: none;
+      border-radius: var(--radius);
+    }
+    td button:hover {
+      background-color: darkred;
+    }
+  </style>
+</head>
+<body>
+  <h1>Eloihi Dictionary</h1>
+
+  <form id="entry-form">
+    <input id="english" placeholder="English" required />
+    <input id="eloihi" placeholder="Eloihi" required />
+    <input id="notes" placeholder="Notes" />
+    <button type="submit">Add</button>
+  </form>
+
+  <select id="search-column">
+    <option value="all">All</option>
+    <option value="english">English</option>
+    <option value="eloihi">Eloihi</option>
+    <option value="notes">Notes</option>
+  </select>
+  <input id="search" placeholder="Search..." style="margin-left: 8px; width: 200px" />
+
+  <table>
+    <thead>
+      <tr>
+        <th><button onclick="sortBy('english')">English ⬍</button></th>
+        <th><button onclick="sortBy('eloihi')">Eloihi ⬍</button></th>
+        <th>Notes</th>
+        <th>Delete</th>
+      </tr>
+    </thead>
+    <tbody id="dict-table"></tbody>
+  </table>
+
+  <script>
+    const path = require("path");
+    const fs = require("fs");
+
+    let appPath = "";
+    try {
+      const remote = require("@electron/remote");
+      appPath = remote.app.getPath("userData");
+    } catch (e) {
+      alert("⚠️ Could not access Electron Remote. This won't work in browser preview.");
+    }
+
+    const dbPath = path.join(appPath, "db.json");
+    const dataDir = path.dirname(dbPath);
+    let dictionary = [];
+
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+      console.log("🗂 Created directory:", dataDir);
+    }
+
+    if (!fs.existsSync(dbPath)) {
+      fs.writeFileSync(dbPath, "[]", "utf-8");
+      console.log("📄 Created data file:", dbPath);
+    }
+
+    function loadData() {
+      const raw = fs.readFileSync(dbPath, "utf-8");
+      dictionary = JSON.parse(raw);
+      renderTable();
+    }
+
+    function saveData() {
+      fs.writeFileSync(dbPath, JSON.stringify(dictionary, null, 2));
+    }
+
+    function renderTable(filtered = dictionary) {
+      const tbody = document.getElementById("dict-table");
+      tbody.innerHTML = "";
+      filtered.forEach((entry, index) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${entry.english}</td>
+          <td>${entry.eloihi}</td>
+          <td>${entry.notes}</td>
+          <td><button onclick="deleteEntry(${index})">Delete</button></td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    let currentSort = { column: null, ascending: true };
+    function sortBy(column) {
+      if (currentSort.column === column) {
+        currentSort.ascending = !currentSort.ascending;
+      } else {
+        currentSort.column = column;
+        currentSort.ascending = true;
+      }
+      const sorted = [...dictionary].sort((a, b) => {
+        const valA = a[column].toLowerCase();
+        const valB = b[column].toLowerCase();
+        return currentSort.ascending
+          ? valA.localeCompare(valB)
+          : valB.localeCompare(valA);
+      });
+      renderTable(sorted);
+    }
+
+    function deleteEntry(index) {
+      dictionary.splice(index, 1);
+      saveData();
+      renderTable();
+    }
+
+    document.getElementById("entry-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const english = document.getElementById("english").value.trim();
+      const eloihi = document.getElementById("eloihi").value.trim();
+      const notes = document.getElementById("notes").value.trim();
+      dictionary.push({ english, eloihi, notes });
+      saveData();
+      renderTable();
+      e.target.reset();
+    });
+
+    document.getElementById("search").addEventListener("input", handleSearch);
+    document.getElementById("search-column").addEventListener("change", handleSearch);
+
+    function handleSearch() {
+      const query = document.getElementById("search").value.toLowerCase();
+      const column = document.getElementById("search-column").value;
+      const filtered = dictionary.filter((entry) => {
+        if (column === "all") {
+          return (
+            entry.english.toLowerCase().includes(query) ||
+            entry.eloihi.toLowerCase().includes(query) ||
+            entry.notes.toLowerCase().includes(query)
+          );
+        } else {
+          return entry[column].toLowerCase().includes(query);
+        }
+      });
+      renderTable(filtered);
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
